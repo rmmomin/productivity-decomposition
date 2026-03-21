@@ -23,6 +23,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from sf_tfp_data import DEFAULT_WORKBOOK_PATH, prepare_workbook
 
 DATE_RE = re.compile(r"^\d{4}:Q[1-4]$")
 SUMMARY_RE = re.compile(r"^(?:\d{4}:[1-4]-\d{4}:[1-4]|Since \d{4}:[1-4]|Past \d+ qtrs)$")
@@ -285,8 +286,14 @@ def main() -> None:
     parser.add_argument(
         "--input",
         type=Path,
-        default=Path("data/quarterly_tfp.xlsx"),
+        default=DEFAULT_WORKBOOK_PATH,
         help="Path to the SF Fed quarterly_tfp workbook.",
+    )
+    parser.add_argument(
+        "--refresh-data",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Download the latest workbook from the SF Fed before building outputs (default: enabled).",
     )
     parser.add_argument(
         "--output-prefix",
@@ -307,7 +314,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    input_path = resolve_input_path(args.input)
+    input_path = prepare_workbook(args.input, refresh_data=args.refresh_data)
     raw_quarterly = load_quarterly_sheet(input_path)
     q = load_quarterly_data(input_path)
 

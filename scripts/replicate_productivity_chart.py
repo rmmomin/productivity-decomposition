@@ -15,6 +15,7 @@ from typing import Sequence
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from sf_tfp_data import DEFAULT_WORKBOOK_PATH, prepare_workbook
 
 RECESSIONS = [
     (pd.Period("1990Q3", freq="Q-DEC"), pd.Period("1991Q1", freq="Q-DEC")),
@@ -41,8 +42,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--input",
         type=Path,
-        default=Path("data/quarterly_tfp.xlsx"),
+        default=DEFAULT_WORKBOOK_PATH,
         help="Path to the Fernald quarterly_tfp workbook.",
+    )
+    parser.add_argument(
+        "--refresh-data",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Download the latest workbook from the SF Fed before plotting (default: enabled).",
     )
     parser.add_argument(
         "--output",
@@ -95,16 +102,6 @@ def parse_args() -> argparse.Namespace:
         help="Image DPI.",
     )
     return parser.parse_args()
-
-
-def resolve_input_path(path: Path) -> Path:
-    if path.exists():
-        return path
-    candidate = REPO_ROOT / path
-    if candidate.exists():
-        return candidate
-    return path
-
 
 def quarter_to_period(value: str) -> pd.Period | None:
     match = QUARTER_RE.match(str(value).strip())
@@ -271,7 +268,7 @@ def plot_productivity_chart(
 
 def main() -> None:
     args = parse_args()
-    input_path = resolve_input_path(args.input)
+    input_path = prepare_workbook(args.input, refresh_data=args.refresh_data)
     export_path = args.export_data if args.export_data is not None else args.output.with_suffix(".csv")
 
     df = load_quarterly_data(input_path, sheet_name=args.sheet)

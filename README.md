@@ -19,6 +19,8 @@ quarterly workbook in `data/quarterly_tfp.xlsx`.
 
 - Source workbook: `data/quarterly_tfp.xlsx`
 - The workbook is the Fernald quarterly TFP file from the San Francisco Fed.
+- Both scripts refresh this workbook from the official SF Fed download URL by
+  default before running.
 
 ## Usage
 
@@ -38,6 +40,13 @@ Run the quarterly productivity drivers chart:
 
 ```bash
 python scripts/replicate_productivity_chart.py
+```
+
+Use the cached local workbook instead of refreshing from SF Fed:
+
+```bash
+python scripts/reproduce_tfp_decomposition.py --no-refresh-data
+python scripts/replicate_productivity_chart.py --no-refresh-data
 ```
 
 ## Outputs
