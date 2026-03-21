@@ -12,6 +12,9 @@ quarterly workbook in `data/quarterly_tfp.xlsx`.
 - `scripts/replicate_productivity_chart.py`
   Builds the quarterly labor-productivity growth drivers chart with a clean,
   unbranded style and exports the plotted data to CSV.
+- `scripts/update_productivity_decomposition.py`
+  Builds the summary decomposition chart, a quarterly decomposition chart, and
+  a bridge table that reconciles the recent-period decomposition measures.
 - `output/`
   Default destination for generated charts and CSVs.
 
@@ -42,11 +45,18 @@ Run the quarterly productivity drivers chart:
 python scripts/replicate_productivity_chart.py
 ```
 
+Run the merged summary + quarterly decomposition workflow:
+
+```bash
+python scripts/update_productivity_decomposition.py
+```
+
 Use the cached local workbook instead of refreshing from SF Fed:
 
 ```bash
 python scripts/reproduce_tfp_decomposition.py --no-refresh-data
 python scripts/replicate_productivity_chart.py --no-refresh-data
+python scripts/update_productivity_decomposition.py --no-refresh-data
 ```
 
 ## Outputs
@@ -57,6 +67,11 @@ Default files written to `output/`:
 - `output/tfp_decomposition.csv`
 - `output/productivity_growth_drivers.png`
 - `output/productivity_growth_drivers.csv`
+- `output/productivity_decomposition_summary.png`
+- `output/productivity_decomposition_summary.csv`
+- `output/productivity_decomposition_quarterly.png`
+- `output/productivity_decomposition_quarterly.csv`
+- `output/productivity_decomposition_bridge.csv`
 
 ## Notes
 

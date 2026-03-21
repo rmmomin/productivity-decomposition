@@ -41,6 +41,10 @@ def to_period(date_str: str) -> pd.Period:
     return pd.Period(year=year, quarter=quarter, freq="Q-DEC")
 
 
+def period_to_year_float(period: pd.Period) -> float:
+    return period.year + (period.quarter - 1) / 4.0
+
+
 def format_last_label(start: pd.Period, end: pd.Period) -> str:
     """Return a compact label for the final period."""
     if end.year == start.year:
@@ -108,6 +112,7 @@ def load_quarterly_data(path: Path) -> pd.DataFrame:
     q = load_quarterly_sheet(path)
     q = q[q["date"].astype(str).str.match(DATE_RE)].copy()
     q["period"] = q["date"].map(to_period)
+    q.sort_values("period", inplace=True)
 
     # Growth-accounting decomposition:
     # dLP = dtfp + alpha*(dk - dhours - dLQ) + dLQ
@@ -115,13 +120,17 @@ def load_quarterly_data(path: Path) -> pd.DataFrame:
     q["labor_composition"] = q["dLQ"]
     q["tfp"] = q["dtfp"]
     q["total_lp"] = q["capital_deepening"] + q["labor_composition"] + q["tfp"]
+    q["raw_capital_per_hour_growth"] = q["dk"] - q["dhours"]
+    q["tfp_util_adjusted"] = q["dtfp_util"]
+    q["utilization"] = q["dutil"]
+    q["x"] = q["period"].map(period_to_year_float)
     q["tfp_share_pct"] = np.where(
         q["total_lp"] != 0,
         100 * q["tfp"] / q["total_lp"],
         np.nan,
     )
 
-    return q
+    return q.reset_index(drop=True)
 
 
 def build_workbook_summary_table(raw_quarterly: pd.DataFrame) -> pd.DataFrame:
