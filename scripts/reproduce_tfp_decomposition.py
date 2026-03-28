@@ -11,6 +11,7 @@ quarter. The workbook's built-in summary periods remain available via
 Usage:
     python reproduce_tfp_decomposition.py
     python reproduce_tfp_decomposition.py --period-source workbook
+    python reproduce_tfp_decomposition.py --mode util_adjusted
     python reproduce_tfp_decomposition.py --input data/quarterly_tfp.xlsx --output-prefix tfp_decomposition
 """
 
@@ -19,6 +20,7 @@ from __future__ import annotations
 import argparse
 import re
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -33,6 +35,55 @@ SUMMARY_PAST_RE = re.compile(r"^Past (?P<n_quarters>\d+) qtrs$")
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 OUTPUT_DIR = REPO_ROOT / "output"
+
+MODE_SPECS: dict[str, dict[str, Any]] = {
+    "raw": {
+        "table_components": ["labor_composition", "capital_deepening", "tfp"],
+        "plot_components": ["tfp", "capital_deepening", "labor_composition"],
+        "share_component": "tfp",
+        "share_column": "tfp_share_pct",
+        "labels": {
+            "labor_composition": "Labor composition",
+            "capital_deepening": "Capital deepening",
+            "tfp": "TFP",
+        },
+        "colors": {
+            "tfp": "#1f77b4",
+            "capital_deepening": "#ff7f0e",
+            "labor_composition": "#2ca02c",
+        },
+        "title": "Average contributions to growth in U.S. output per hour",
+    },
+    "util_adjusted": {
+        "table_components": [
+            "labor_composition",
+            "capital_deepening",
+            "utilization",
+            "tfp_util_adjusted",
+        ],
+        "plot_components": [
+            "tfp_util_adjusted",
+            "capital_deepening",
+            "labor_composition",
+            "utilization",
+        ],
+        "share_component": "tfp_util_adjusted",
+        "share_column": "tfp_util_adjusted_share_pct",
+        "labels": {
+            "labor_composition": "Labor composition",
+            "capital_deepening": "Capital deepening",
+            "utilization": "Utilization",
+            "tfp_util_adjusted": "Utilization-adjusted TFP",
+        },
+        "colors": {
+            "tfp_util_adjusted": "#1f77b4",
+            "capital_deepening": "#ff7f0e",
+            "labor_composition": "#2ca02c",
+            "utilization": "#e15759",
+        },
+        "title": "Average contributions to growth in U.S. output per hour\n(utilization-adjusted TFP separated)",
+    },
+}
 
 
 def to_period(date_str: str) -> pd.Period:
@@ -101,6 +152,57 @@ def parse_summary_window(label: str, latest_available: pd.Period) -> tuple[str |
     return pd.NA, pd.NA, pd.NA
 
 
+def get_mode_spec(mode: str) -> dict[str, Any]:
+    try:
+        return MODE_SPECS[mode]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported decomposition mode: {mode}") from exc
+
+
+def period_table_columns(mode: str) -> list[str]:
+    spec = get_mode_spec(mode)
+    return [
+        "period",
+        "start",
+        "end",
+        *spec["table_components"],
+        "total_lp",
+        spec["share_column"],
+        "n_quarters",
+    ]
+
+
+def compute_share(component_value: float, total_lp: float) -> float:
+    if total_lp == 0:
+        return np.nan
+    return 100 * component_value / total_lp
+
+
+def default_output_prefix(mode: str) -> Path:
+    suffix = "" if mode == "raw" else "_util_adjusted"
+    return OUTPUT_DIR / f"tfp_decomposition{suffix}"
+
+
+def validate_decomposition_identity(
+    df: pd.DataFrame,
+    mode: str,
+    total_column: str = "total_lp",
+    atol: float = 1e-10,
+) -> float:
+    if df.empty:
+        return 0.0
+
+    spec = get_mode_spec(mode)
+    components = spec["table_components"]
+    gap = (df[total_column] - df[components].sum(axis=1)).abs().max()
+    gap = 0.0 if pd.isna(gap) else float(gap)
+    if gap > atol:
+        raise ValueError(
+            f"Decomposition identity failed for mode={mode}: max |gap| = {gap:.3e} exceeds {atol:.1e}."
+        )
+    return gap
+
+
 def load_quarterly_sheet(path: Path) -> pd.DataFrame:
     q = pd.read_excel(path, sheet_name="quarterly", header=1)
     if "date" not in q.columns:
@@ -119,24 +221,56 @@ def load_quarterly_data(path: Path) -> pd.DataFrame:
     q["capital_deepening"] = q["alpha"] * (q["dk"] - q["dhours"] - q["dLQ"])
     q["labor_composition"] = q["dLQ"]
     q["tfp"] = q["dtfp"]
-    q["total_lp"] = q["capital_deepening"] + q["labor_composition"] + q["tfp"]
-    q["raw_capital_per_hour_growth"] = q["dk"] - q["dhours"]
     q["tfp_util_adjusted"] = q["dtfp_util"]
     q["utilization"] = q["dutil"]
+    q["total_lp"] = q["capital_deepening"] + q["labor_composition"] + q["tfp"]
+    q["raw_capital_per_hour_growth"] = q["dk"] - q["dhours"]
     q["x"] = q["period"].map(period_to_year_float)
     q["tfp_share_pct"] = np.where(
         q["total_lp"] != 0,
         100 * q["tfp"] / q["total_lp"],
         np.nan,
     )
+    q["tfp_util_adjusted_share_pct"] = np.where(
+        q["total_lp"] != 0,
+        100 * q["tfp_util_adjusted"] / q["total_lp"],
+        np.nan,
+    )
 
+    validate_decomposition_identity(q, mode="raw")
+    validate_decomposition_identity(q, mode="util_adjusted")
     return q.reset_index(drop=True)
 
 
-def build_workbook_summary_table(raw_quarterly: pd.DataFrame) -> pd.DataFrame:
+def build_summary_row(
+    *,
+    label: str,
+    start: str | pd.NA,
+    end: str | pd.NA,
+    component_values: dict[str, float],
+    total_lp: float,
+    n_quarters: int | pd.NA,
+    mode: str,
+) -> dict[str, Any]:
+    spec = get_mode_spec(mode)
+    share_component = spec["share_component"]
+    row: dict[str, Any] = {
+        "period": label,
+        "start": start,
+        "end": end,
+        "total_lp": total_lp,
+        spec["share_column"]: compute_share(component_values[share_component], total_lp),
+        "n_quarters": n_quarters,
+    }
+    for component in spec["table_components"]:
+        row[component] = component_values[component]
+    return row
+
+
+def build_workbook_summary_table(raw_quarterly: pd.DataFrame, mode: str = "raw") -> pd.DataFrame:
     summary = raw_quarterly[raw_quarterly["date"].astype(str).str.match(SUMMARY_RE)].copy()
     if summary.empty:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=period_table_columns(mode))
 
     latest_available = to_period(
         raw_quarterly.loc[raw_quarterly["date"].astype(str).str.match(DATE_RE), "date"].iloc[-1]
@@ -145,27 +279,45 @@ def build_workbook_summary_table(raw_quarterly: pd.DataFrame) -> pd.DataFrame:
     for _, row in summary.iterrows():
         start, end, n_quarters = parse_summary_window(str(row["date"]), latest_available)
         total_lp = float(row["dLP"])
-        tfp = float(row["dtfp"])
         labor_composition = float(row["dLQ"])
-        capital_deepening = total_lp - labor_composition - tfp
+        component_values = {
+            "labor_composition": labor_composition,
+            "capital_deepening": 0.0,
+            "tfp": float(row["dtfp"]),
+            "tfp_util_adjusted": float(row["dtfp_util"]),
+            "utilization": float(row["dutil"]),
+        }
+        if mode == "raw":
+            component_values["capital_deepening"] = (
+                total_lp - component_values["labor_composition"] - component_values["tfp"]
+            )
+        else:
+            component_values["capital_deepening"] = (
+                total_lp
+                - component_values["labor_composition"]
+                - component_values["utilization"]
+                - component_values["tfp_util_adjusted"]
+            )
+
         rows.append(
-            {
-                "period": prettify_summary_label(str(row["date"])),
-                "start": start,
-                "end": end,
-                "labor_composition": labor_composition,
-                "capital_deepening": capital_deepening,
-                "tfp": tfp,
-                "total_lp": total_lp,
-                "tfp_share_pct": (100 * tfp / total_lp) if total_lp != 0 else np.nan,
-                "n_quarters": n_quarters,
-            }
+            build_summary_row(
+                label=prettify_summary_label(str(row["date"])),
+                start=start,
+                end=end,
+                component_values=component_values,
+                total_lp=total_lp,
+                n_quarters=n_quarters,
+                mode=mode,
+            )
         )
 
-    return pd.DataFrame(rows)
+    period_df = pd.DataFrame(rows, columns=period_table_columns(mode))
+    validate_decomposition_identity(period_df, mode=mode)
+    return period_df
 
 
-def build_period_table(q: pd.DataFrame, latest_start: str = "2023Q1") -> pd.DataFrame:
+def build_period_table(q: pd.DataFrame, latest_start: str = "2023Q1", mode: str = "raw") -> pd.DataFrame:
+    spec = get_mode_spec(mode)
     latest_available = q["period"].max()
     latest_start_period = pd.Period(latest_start, freq="Q-DEC")
     latest_label = format_last_label(latest_start_period, latest_available)
@@ -183,27 +335,26 @@ def build_period_table(q: pd.DataFrame, latest_start: str = "2023Q1") -> pd.Data
         start_p = pd.Period(start, freq="Q-DEC")
         end_p = pd.Period(end, freq="Q-DEC")
         mask = (q["period"] >= start_p) & (q["period"] <= end_p)
-        sub = q.loc[
-            mask,
-            ["labor_composition", "capital_deepening", "tfp", "total_lp"],
-        ]
+        sub = q.loc[mask, [*spec["table_components"], "total_lp"]]
+        component_values = {
+            component: float(sub[component].mean()) for component in spec["table_components"]
+        }
+        total_lp = float(sub["total_lp"].mean())
         rows.append(
-            {
-                "period": label,
-                "start": str(start_p),
-                "end": str(end_p),
-                "labor_composition": sub["labor_composition"].mean(),
-                "capital_deepening": sub["capital_deepening"].mean(),
-                "tfp": sub["tfp"].mean(),
-                "total_lp": sub["total_lp"].mean(),
-                "tfp_share_pct": (100 * sub["tfp"].mean() / sub["total_lp"].mean())
-                if sub["total_lp"].mean() != 0
-                else np.nan,
-                "n_quarters": int(sub.shape[0]),
-            }
+            build_summary_row(
+                label=label,
+                start=str(start_p),
+                end=str(end_p),
+                component_values=component_values,
+                total_lp=total_lp,
+                n_quarters=int(sub.shape[0]),
+                mode=mode,
+            )
         )
 
-    return pd.DataFrame(rows)
+    period_df = pd.DataFrame(rows, columns=period_table_columns(mode))
+    validate_decomposition_identity(period_df, mode=mode)
+    return period_df
 
 
 def resolve_input_path(path: Path) -> Path:
@@ -215,41 +366,49 @@ def resolve_input_path(path: Path) -> Path:
     return path
 
 
-def plot_decomposition(period_df: pd.DataFrame, output_png: Path) -> None:
+def plot_decomposition(period_df: pd.DataFrame, output_png: Path, mode: str = "raw") -> None:
+    spec = get_mode_spec(mode)
     labels = period_df["period"].tolist()
     x = np.arange(len(labels))
 
     fig_width = max(10.5, 1.5 * len(labels))
     fig, ax = plt.subplots(figsize=(fig_width, 5.5))
 
-    ax.bar(x, period_df["tfp"], label="TFP")
-    ax.bar(
-        x,
-        period_df["capital_deepening"],
-        bottom=period_df["tfp"],
-        label="Capital deepening",
-    )
-    ax.bar(
-        x,
-        period_df["labor_composition"],
-        bottom=period_df["tfp"] + period_df["capital_deepening"],
-        label="Labor composition",
-    )
+    cumulative = np.zeros(len(period_df))
+    stack_levels = [cumulative.copy()]
+    share_bottoms = np.zeros(len(period_df))
+    for component in spec["plot_components"]:
+        values = period_df[component].to_numpy()
+        if component == spec["share_component"]:
+            share_bottoms = cumulative.copy()
+        ax.bar(
+            x,
+            values,
+            bottom=cumulative,
+            label=spec["labels"][component],
+            color=spec["colors"][component],
+        )
+        cumulative = cumulative + values
+        stack_levels.append(cumulative.copy())
 
     totals = period_df["total_lp"].to_numpy()
-    tfp_vals = period_df["tfp"].to_numpy()
-    shares = period_df["tfp_share_pct"].to_numpy()
+    share_values = period_df[spec["share_component"]].to_numpy()
+    shares = period_df[spec["share_column"]].to_numpy()
 
-    # Labels on top of each stacked bar for total labor-productivity growth
     for xi, total in zip(x, totals):
-        ax.text(xi, total + 0.05, f"{total:.2f}", ha="center", va="bottom", fontsize=10)
+        if total >= 0:
+            y = total + 0.05
+            va = "bottom"
+        else:
+            y = total - 0.05
+            va = "top"
+        ax.text(xi, y, f"{total:.2f}", ha="center", va=va, fontsize=10)
 
-    # White label inside the TFP segment showing TFP as a share of the total
-    for xi, tfp, share in zip(x, tfp_vals, shares):
+    for xi, share_value, share, share_bottom in zip(x, share_values, shares, share_bottoms):
         if np.isfinite(share):
             ax.text(
                 xi,
-                tfp / 2,
+                share_bottom + share_value / 2,
                 f"{share:.0f}%",
                 ha="center",
                 va="center",
@@ -261,7 +420,7 @@ def plot_decomposition(period_df: pd.DataFrame, output_png: Path) -> None:
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=20, ha="right")
     ax.set_ylabel("Percent (annual rate)")
-    ax.set_title("Average contributions to growth in U.S. output per hour")
+    ax.set_title(spec["title"])
 
     ax.legend(
         ncols=1,
@@ -272,8 +431,9 @@ def plot_decomposition(period_df: pd.DataFrame, output_png: Path) -> None:
     )
 
     ax.grid(axis="y", linestyle=":", linewidth=0.6)
-    ymax = max(0.0, float(np.nanmax(totals))) + 0.35
-    ymin = min(0.0, float(np.nanmin(np.r_[0.0, period_df[["tfp", "capital_deepening", "labor_composition"]].to_numpy().ravel()]))) - 0.15
+    stack_extents = np.concatenate(stack_levels) if stack_levels else np.array([0.0])
+    ymax = max(0.0, float(np.nanmax(np.r_[totals, stack_extents]))) + 0.35
+    ymin = min(0.0, float(np.nanmin(np.r_[totals, stack_extents]))) - 0.15
     ax.set_ylim(ymin, ymax)
 
     fig.text(
@@ -291,7 +451,7 @@ def plot_decomposition(period_df: pd.DataFrame, output_png: Path) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--input",
         type=Path,
@@ -307,8 +467,12 @@ def main() -> None:
     parser.add_argument(
         "--output-prefix",
         type=Path,
-        default=OUTPUT_DIR / "tfp_decomposition",
-        help="Output prefix for the PNG and CSV files.",
+        default=None,
+        help=(
+            "Output prefix for the PNG and CSV files. Defaults to "
+            "output/tfp_decomposition for raw mode and "
+            "output/tfp_decomposition_util_adjusted for util_adjusted mode."
+        ),
     )
     parser.add_argument(
         "--latest-start",
@@ -321,6 +485,12 @@ def main() -> None:
         default="custom",
         help="Use custom quarter aggregation or workbook summary periods.",
     )
+    parser.add_argument(
+        "--mode",
+        choices=tuple(MODE_SPECS),
+        default="raw",
+        help="Choose the raw or utilization-adjusted decomposition.",
+    )
     args = parser.parse_args()
 
     input_path = prepare_workbook(args.input, refresh_data=args.refresh_data)
@@ -328,27 +498,29 @@ def main() -> None:
     q = load_quarterly_data(input_path)
 
     if args.period_source == "workbook":
-        period_df = build_workbook_summary_table(raw_quarterly)
+        period_df = build_workbook_summary_table(raw_quarterly, mode=args.mode)
         if period_df.empty:
-            period_df = build_period_table(q, latest_start=args.latest_start)
+            period_df = build_period_table(q, latest_start=args.latest_start, mode=args.mode)
             period_source_used = "custom"
         else:
             period_source_used = "workbook"
     else:
-        period_df = build_period_table(q, latest_start=args.latest_start)
+        period_df = build_period_table(q, latest_start=args.latest_start, mode=args.mode)
         period_source_used = "custom"
 
-    output_png = args.output_prefix.with_suffix(".png")
-    output_csv = args.output_prefix.with_suffix(".csv")
+    output_prefix = args.output_prefix if args.output_prefix is not None else default_output_prefix(args.mode)
+    output_png = output_prefix.with_suffix(".png")
+    output_csv = output_prefix.with_suffix(".csv")
     output_png.parent.mkdir(parents=True, exist_ok=True)
     output_csv.parent.mkdir(parents=True, exist_ok=True)
 
     period_df.to_csv(output_csv, index=False)
-    plot_decomposition(period_df, output_png)
+    plot_decomposition(period_df, output_png, mode=args.mode)
 
     latest_available = q["period"].max()
     print(f"Latest quarter in workbook: {latest_available}")
     print(f"Period source used: {period_source_used}")
+    print(f"Mode used: {args.mode}")
     print(f"Wrote {output_png}")
     print(f"Wrote {output_csv}")
 

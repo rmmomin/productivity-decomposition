@@ -1,8 +1,8 @@
-window_start,window_end,n_quarters,measure,average_annual_rate
-2023Q1,2025Q4,12,Raw capital per hour growth (dk - dhours),2.5988190940959406
-2023Q1,2025Q4,12,Capital deepening contribution,0.8095646312925799
-2023Q1,2025Q4,12,Labor composition,0.5952613499520846
-2023Q1,2025Q4,12,TFP (unadjusted),1.3294814751953166
-2023Q1,2025Q4,12,TFP (utilization-adjusted),1.1118728072726134
-2023Q1,2025Q4,12,Utilization,0.21760866792270298
-2023Q1,2025Q4,12,Total labor productivity growth,2.7343074564399807
+window_start,window_end,n_quarters,sort_order,identity_group,measure,formula,average_annual_rate,identity_gap
+2023Q1,2025Q4,12,1,capital_input,Raw capital per hour growth (dk - dhours),Input to capital deepening contribution,2.5988190940959406,
+2023Q1,2025Q4,12,2,total_lp_components,Capital deepening contribution,Component of total labor productivity growth,0.8095646312925799,
+2023Q1,2025Q4,12,3,total_lp_components,Labor composition,Component of total labor productivity growth,0.5952613499520846,
+2023Q1,2025Q4,12,4,raw_tfp_components,TFP (utilization-adjusted),Component of raw TFP and total labor productivity growth,1.1118728072726134,
+2023Q1,2025Q4,12,5,raw_tfp_components,Utilization,Component of raw TFP and total labor productivity growth,0.21760866792270298,
+2023Q1,2025Q4,12,6,raw_tfp_identity,TFP (unadjusted),TFP (utilization-adjusted) + Utilization,1.3294814751953166,2.220446049250313e-16
+2023Q1,2025Q4,12,7,total_lp_identity,Total labor productivity growth,Capital deepening contribution + Labor composition + TFP (utilization-adjusted) + Utilization,2.7343074564399807,0.0
