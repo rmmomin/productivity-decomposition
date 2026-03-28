@@ -6,6 +6,8 @@ Outputs:
 - productivity_decomposition_summary_util_adjusted.png / .csv
 - productivity_decomposition_quarterly.png / .csv
 - productivity_decomposition_quarterly_util_adjusted.png / .csv
+- tfp_annual_raw.png / .csv
+- tfp_annual_util_adjusted.png / .csv
 - productivity_decomposition_bridge.csv
 """
 
@@ -19,6 +21,10 @@ from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
 
+from plot_annual_tfp_series import (
+    load_annual_data as load_annual_tfp_data,
+    write_annual_tfp_outputs,
+)
 from reproduce_tfp_decomposition import (
     build_period_table,
     get_mode_spec,
@@ -387,6 +393,7 @@ def main() -> None:
     input_path = prepare_workbook(args.input, refresh_data=args.refresh_data)
 
     q = load_quarterly_data(input_path)
+    annual_df = load_annual_tfp_data(input_path)
     period_df_raw = build_period_table(q, latest_start=args.latest_start, mode="raw")
     period_df_util_adjusted = build_period_table(
         q,
@@ -406,6 +413,7 @@ def main() -> None:
         mode="util_adjusted",
     )
     bridge_df = build_bridge_table(q, recent_start=args.latest_start)
+    annual_prefix = args.output_prefix.with_name("tfp_annual")
 
     paths = output_paths(args.output_prefix)
     for path in paths.values():
@@ -416,6 +424,7 @@ def main() -> None:
     quarterly_df_raw.to_csv(paths["quarterly_csv"], index=False)
     quarterly_df_util_adjusted.to_csv(paths["quarterly_util_adjusted_csv"], index=False)
     bridge_df.to_csv(paths["bridge_csv"], index=False)
+    annual_written = write_annual_tfp_outputs(annual_df, output_prefix=annual_prefix)
 
     plot_decomposition(period_df_raw, paths["summary_png"], mode="raw")
     plot_decomposition(
@@ -452,6 +461,8 @@ def main() -> None:
         "bridge_csv",
     ]:
         print(f"Wrote {paths[key]}")
+    for key in ["raw_png", "raw_csv", "util_adjusted_png", "util_adjusted_csv"]:
+        print(f"Wrote {annual_written[key]}")
 
 
 if __name__ == "__main__":

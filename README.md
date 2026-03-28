@@ -17,7 +17,11 @@ quarterly workbook in `data/quarterly_tfp.xlsx`.
 - `scripts/update_productivity_decomposition.py`
   Builds the summary decomposition chart, a quarterly decomposition chart, and
   a bridge table that reconciles the recent-period decomposition measures. It
-  now writes both the raw and utilization-adjusted decomposition outputs.
+  now writes both the raw and utilization-adjusted decomposition outputs plus
+  annual raw/adjusted TFP charts.
+- `scripts/plot_annual_tfp_series.py`
+  Builds annual raw TFP and utilization-adjusted TFP charts directly from the
+  workbook's `annual` tab and exports matching CSVs.
 - `output/`
   Default destination for generated charts and CSVs.
 
@@ -68,6 +72,12 @@ Run the quarterly productivity drivers chart:
 python scripts/replicate_productivity_chart.py
 ```
 
+Run the annual raw and utilization-adjusted TFP charts:
+
+```bash
+python scripts/plot_annual_tfp_series.py
+```
+
 Run the merged summary + quarterly decomposition workflow:
 
 ```bash
@@ -75,7 +85,8 @@ python scripts/update_productivity_decomposition.py
 ```
 
 That merged workflow writes both the raw and utilization-adjusted summary and
-quarterly decomposition outputs in one run.
+quarterly decomposition outputs, plus the annual raw and utilization-adjusted
+TFP charts, in one run.
 
 Use the cached local workbook instead of refreshing from SF Fed:
 
@@ -103,6 +114,10 @@ Default files written to `output/`:
 - `output/productivity_decomposition_quarterly.csv`
 - `output/productivity_decomposition_quarterly_util_adjusted.png`
 - `output/productivity_decomposition_quarterly_util_adjusted.csv`
+- `output/tfp_annual_raw.png`
+- `output/tfp_annual_raw.csv`
+- `output/tfp_annual_util_adjusted.png`
+- `output/tfp_annual_util_adjusted.csv`
 - `output/productivity_decomposition_bridge.csv`
 
 ## Notes
@@ -114,3 +129,5 @@ Default files written to `output/`:
   `2023Q1` through the latest quarter in the workbook.
 - The adjusted figure separates utilization from utilization-adjusted TFP
   instead of folding utilization back into the TFP bar.
+- The annual TFP charts use the workbook's `annual` tab directly rather than
+  annualizing the quarterly data inside this repo.
