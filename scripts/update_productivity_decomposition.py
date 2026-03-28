@@ -6,6 +6,8 @@ Outputs:
 - productivity_decomposition_summary_util_adjusted.png / .csv
 - productivity_decomposition_quarterly.png / .csv
 - productivity_decomposition_quarterly_util_adjusted.png / .csv
+- tfp_decomposition_annual.png / .csv
+- tfp_decomposition_annual_util_adjusted.png / .csv
 - tfp_annual_raw.png / .csv
 - tfp_annual_util_adjusted.png / .csv
 - productivity_decomposition_bridge.csv
@@ -21,6 +23,7 @@ from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
 
+from plot_annual_productivity_decomposition import write_annual_decomposition_outputs
 from plot_annual_tfp_series import (
     load_annual_data as load_annual_tfp_data,
     write_annual_tfp_outputs,
@@ -93,6 +96,18 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=1985,
         help="First year shown in the quarterly chart.",
+    )
+    parser.add_argument(
+        "--annual-start-year",
+        type=int,
+        default=1948,
+        help="First year shown in the annual TFP series charts.",
+    )
+    parser.add_argument(
+        "--annual-latest-start-year",
+        type=int,
+        default=2023,
+        help="Start year for the final annual summary bar in the annual decomposition charts.",
     )
     return parser.parse_args()
 
@@ -414,6 +429,7 @@ def main() -> None:
     )
     bridge_df = build_bridge_table(q, recent_start=args.latest_start)
     annual_prefix = args.output_prefix.with_name("tfp_annual")
+    annual_decomp_prefix = args.output_prefix.with_name("tfp_decomposition_annual")
 
     paths = output_paths(args.output_prefix)
     for path in paths.values():
@@ -424,7 +440,16 @@ def main() -> None:
     quarterly_df_raw.to_csv(paths["quarterly_csv"], index=False)
     quarterly_df_util_adjusted.to_csv(paths["quarterly_util_adjusted_csv"], index=False)
     bridge_df.to_csv(paths["bridge_csv"], index=False)
-    annual_written = write_annual_tfp_outputs(annual_df, output_prefix=annual_prefix)
+    annual_written = write_annual_tfp_outputs(
+        annual_df,
+        output_prefix=annual_prefix,
+        start_year=args.annual_start_year,
+    )
+    annual_decomp_written = write_annual_decomposition_outputs(
+        annual_df,
+        output_prefix=annual_decomp_prefix,
+        latest_start_year=args.annual_latest_start_year,
+    )
 
     plot_decomposition(period_df_raw, paths["summary_png"], mode="raw")
     plot_decomposition(
@@ -463,6 +488,8 @@ def main() -> None:
         print(f"Wrote {paths[key]}")
     for key in ["raw_png", "raw_csv", "util_adjusted_png", "util_adjusted_csv"]:
         print(f"Wrote {annual_written[key]}")
+    for key in ["raw_png", "raw_csv", "util_adjusted_png", "util_adjusted_csv"]:
+        print(f"Wrote {annual_decomp_written[key]}")
 
 
 if __name__ == "__main__":

@@ -18,10 +18,15 @@ quarterly workbook in `data/quarterly_tfp.xlsx`.
   Builds the summary decomposition chart, a quarterly decomposition chart, and
   a bridge table that reconciles the recent-period decomposition measures. It
   now writes both the raw and utilization-adjusted decomposition outputs plus
-  annual raw/adjusted TFP charts.
+  annual raw/adjusted TFP charts and annual decomposition charts.
 - `scripts/plot_annual_tfp_series.py`
   Builds annual raw TFP and utilization-adjusted TFP charts directly from the
   workbook's `annual` tab and exports matching CSVs.
+- `scripts/plot_annual_productivity_decomposition.py`
+  Builds annual raw and utilization-adjusted labor-productivity decomposition
+  chart analogues of `tfp_decomposition.png` and
+  `tfp_decomposition_util_adjusted.png`, using the workbook's `annual` tab and
+  exporting matching CSVs.
 - `output/`
   Default destination for generated charts and CSVs.
 
@@ -78,6 +83,12 @@ Run the annual raw and utilization-adjusted TFP charts:
 python scripts/plot_annual_tfp_series.py
 ```
 
+Run the annual raw and utilization-adjusted decomposition charts:
+
+```bash
+python scripts/plot_annual_productivity_decomposition.py
+```
+
 Run the merged summary + quarterly decomposition workflow:
 
 ```bash
@@ -86,7 +97,7 @@ python scripts/update_productivity_decomposition.py
 
 That merged workflow writes both the raw and utilization-adjusted summary and
 quarterly decomposition outputs, plus the annual raw and utilization-adjusted
-TFP charts, in one run.
+TFP charts and annual decomposition charts, in one run.
 
 Use the cached local workbook instead of refreshing from SF Fed:
 
@@ -114,6 +125,10 @@ Default files written to `output/`:
 - `output/productivity_decomposition_quarterly.csv`
 - `output/productivity_decomposition_quarterly_util_adjusted.png`
 - `output/productivity_decomposition_quarterly_util_adjusted.csv`
+- `output/tfp_decomposition_annual.png`
+- `output/tfp_decomposition_annual.csv`
+- `output/tfp_decomposition_annual_util_adjusted.png`
+- `output/tfp_decomposition_annual_util_adjusted.csv`
 - `output/tfp_annual_raw.png`
 - `output/tfp_annual_raw.csv`
 - `output/tfp_annual_util_adjusted.png`
@@ -131,3 +146,7 @@ Default files written to `output/`:
   instead of folding utilization back into the TFP bar.
 - The annual TFP charts use the workbook's `annual` tab directly rather than
   annualizing the quarterly data inside this repo.
+- The annual decomposition charts also use the workbook's `annual` tab directly;
+  because the workbook notes annual identities are only approximate, annual
+  capital deepening is computed residually so the decomposition sums exactly to
+  annual output-per-hour growth.
